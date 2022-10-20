@@ -1,0 +1,718 @@
+---
+title: "Exam"
+author: "Bernat Sort"
+date: "8/1/2021"
+output: html_document
+---
+
+# EXERCISE 1: 
+
+## Summary of the LC/MS based method (from sample preparation to LC/MS based analysis) to measure BC hydrophilic cell extracts according to those described in the original manuscript by Samino et al 2017: 
+
+In this study, MCF-7, HCC70, MDA-MB-231, MDA-MB-436 and MDA-MB-468 BC cell lines were analyzed.  Some of these BC cell lines were carriers of BRCA1 pathogenic mutations (MDA-MB-436 and MDA-MB-468) while MCF-7, HCC70 and MDA-MB-231 were non-mutated BRCA1 BC cell lines.
+Once they got the samples, they mixed them in a solvent (methanol and dichloromethane) in order to quench (stop) the metabolism. Then, they ultrasonicated them on ice to break them to get the metabolite extraction. After being incubated for 30 min on ice, samples were centrifugated at 4ºC, and the liquid or aqueous phase was transferred to the LC-MS vial.
+To do the untargeted metabolomic analysis it was used Liquid Chromatography coupled to Mass Spectrometry, because the samples were in aqueous phase. 
+The samples were ionized using ESI in positive (ESI+) or in negative mode (ESI-). 
+The mass analyzer it was used was a QTOF (m/z range of 100–1200). On the one hand the quadrupole filtered the ions and selected only particular ions based on their mass. On the other hand, these ions were separated and detected with the TOF. 
+After selecting the ions of interest, it was time to do MS/MS in order to fragment them. The metabolites entered in the collision cell, where the chemical structure of these compounds was broken, and fragments of that intact ion were generated. They obtained a fragmentation spectrum. If they executed a standard and it eluted at the same RT that those ions in the biological sample, and it gave them the same fragmentation spectrum they could say that particular metabolite was in their sample.
+
+
+
+## 1.1 What type of metabolomics approach was used to analyse the BC hydrophilic extracts? Was it an untargeted or a targeted analysis?
+It was used an untargeted approach because they were trying to find out alterations in metabolites (biomarkers) in human BC cell lines characterized by the presence of pathogenic mutations in the BRCA1 gene and in BC cell lines without BRCA mutations in order to see if there was relationship between these mutations and the HBCO syndrome.
+
+## 1.2 What type of chromatography was used? Was it normal or reverse phase?
+It was used LC-MS (Liquid Chromatography Coupled to Mass Spectrometry) in Normal phase. 
+
+## 1.3 What type of MS-analyser was used? 
+It was used a Q-TOF. 
+
+## 1.4 What type of ionization and ionization modes were used? 
+ESI in positive (ESI +) and negative (ESI−) electrospray ionization modes. 
+
+
+
+# EXERCISE 2: 
+## Read raw “.mzXML” files:
+
+### First of all we Load Packages
+```{r load-libs, message=FALSE, results="hide", echo=TRUE, warning=FALSE}
+#Loading libraries. To include it in the Packages.
+#Loading cliqueMS
+library("cliqueMS")
+#Loading xcms
+library("xcms")
+#Loading enviPat
+library("enviPat")
+#Loading RColorBrewer
+library("RColorBrewer")
+#Loading ggplot2
+library("ggplot2")
+#Loading magrittr
+library("magrittr")
+#Loading plotly
+library("plotly")
+#Loading DT
+library("DT")
+```
+### Load the workspace
+```{r}
+load("Exam.Rdata") 
+```
+
+### Load data
+#### List .mzML files contained in the working directory
+```{r load-data, message=FALSE, eval=FALSE, echo=TRUE}
+path.mzXML <- "C:/Users/Bernat/Desktop/UNI/3r 2010-2021/Omicas/Practicas/PractFINAL" 
+
+mzXML.files <- list.files(path.mzXML, pattern= ".mzXML", 
+                         recursive=T, full.names = T)
+```
+
+### Phenodata dataframe from the working directory structure
+```{r pheno, message=FALSE, eval=FALSE, echo=TRUE}
+pheno <- phenoDataFromPaths(mzXML.files)
+pheno$sample_name <- rownames(pheno) 
+pheno$sample_group <- pheno$class
+```
+The phenoDataFromPaths function builds a data.frame representing the experimental design from the folder structure in which the files of the experiment are located.
+
+### **Finally, we can read data ".mzXML" files with readMSData method from the MSnbase package.** 
+```{r readdata, message=FALSE, eval=FALSE, echo=TRUE}
+raw_data <- readMSData(files = mzXML.files,
+                       pdata = new("NAnnotatedDataFrame", pheno),
+                       mode = "onDisk")
+```
+mode = "onDisk": reads only spectrum header from files, but no data which is retrieved on demand allowing to handle very large experiments with high memory demand.
+It does not upload it to RAM, only when I tell it to (on demand). It reads only the metadata, not the mass specs, which is what it weighs. 
+
+
+
+## 2.1 How many replicates were measured for each cell line? 
+
+#### **Number of replicates measured for each cell line:** 
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+table(pheno$sample_group)
+```
+As it is shown, there are 6 cell lines: HCC70, MCF7, MDA231, MDA436, MDA468 and QC, with 5, 6, 6, 5, 5, and 5 replicates measured respectively. 
+
+
+
+## 2.2 & 2.3 How much did the entire chromatographic run span? Plot total ion chromatograms for all samples and color-code them according to different cell lines type:
+
+#### **How much time did the entire chromatographic run span?**
+In order to see the entire chromatographic run time we plot TIC: 
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We define colors according to experimental groups
+group_colors <- paste0(brewer.pal(length(levels(pData(raw_data)$sample_group)),
+                                  "Dark2"), "60")
+names(group_colors) <- levels(pData(raw_data)$sample_group)
+```
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We plot TIC using chromatogram() function 
+## raw_data is the s4 object
+TICs <- chromatogram(raw_data, aggregationFun = "sum") 
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE }
+# Plot of TIC according to experimental groups
+plot(TICs, col = group_colors[raw_data$sample_group], main = "TIC")
+```
+
+We note the entire chromatographic run takes 600 seconds, that is to say, 10 minutes. 
+
+
+
+
+## 2.4 Extract Adenine ion chromatogram ([M+H]+) from raw data. Which sample does apparently hold higher levels of Adenine?. Plot the Adenine extracted ion chromatogram for this sample.
+
+```{r message=FALSE, eval=FALSE, echo=TRUE, cache=TRUE}
+cw_onlinexcms_default <- CentWaveParam(ppm = 15, 
+                                       peakwidth = c(5, 10),snthresh = 6, 
+                                       prefilter = c(3, 100),mzCenterFun = "wMean", 
+                                       integrate = 1L,mzdiff = -0.001, fitgauss = FALSE, 
+                                       noise = 0, verboseColumns = FALSE, 
+                                       roiList = list(), firstBaselineCheck = TRUE, 
+                                       roiScales = numeric())
+```
+
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## rt and m/z range of the Adenine peak area 
+M <- 135.054495185 #monoisotopic weight of Adenine 
+H <- 1.007276 #proton weight
+MH <- M + H #theoretical weight = 136.0618
+
+## Adenine peak mz range width according to XCMS parameters
+error <- cw_onlinexcms_default@ppm #errors in ppm 
+mmu_min <- MH-(error*MH/1e6) #proton weight of Adenine +- a ppm error: 15 ppm 
+mmu_max <- MH+(error*MH/1e6)
+mzr <- c(mmu_min, mmu_max) #m/z range
+
+## Adenine peak rt range width according to XCMS parameters
+apex.Adenine <- 263 #retention time ~ 263 s
+rt.window <- cw_onlinexcms_default@peakwidth[2] #max rt width in seconds
+rtr <- c(apex.Adenine -rt.window, apex.Adenine +rt.window)
+
+```
+
+#### **Extracted Ion Chromatograph (EIC) of Adenine from raw data** 
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+chr_Adenine  <- chromatogram(raw_data, mz = mzr, rt = rtr)
+```
+
+```{r Adenine, message=FALSE, eval=TRUE, echo=TRUE, fig.width = 10}
+plot(chr_Adenine, col = group_colors[chr_Adenine$sample_group], lwd = 2)
+```
+This is the Extracted Ion Chromatogram of Adenine.
+It plots the chromatogram in a mass range and in a retention time range.
+We note that we have 32 peaks, one for each sample, and colored according to their experimental group. 
+We are in a mass range that goes from a minimum mass range (mmu_min) of 136.0597 to a maximum mass range (mmu_max) of 136.0638. 
+The retention time is 263 s, because when we know that a metabolite is present in the samples, we know which is its the retention time.
+We observe that the maximum intensity at the apex (maxo) is 35000 approximately.
+
+#### **Sample that holds higher levels of Adenine**
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+##We take a look to the color of the sample in hexadecimal.
+group_colors
+```
+In the EIC of Adenine we see the sample that holds higher levels of Adenine is in color orange. 
+We see that in hexadecimal, D95F0260 corresponds to the orange color in RGB. Therefore, MCF7 apparently hold higher levels of Adenine.
+HEX to RGB: https://www.peko-step.com/es/tool/tfcolor.html
+
+# EXERCISE 3: 
+## Run a full XCMS workflow. Explain sequentially each one of the steps in your own words. Use centwave peaks detection, obiwarp retention time alignment and peak density for correspondence.
+
+## Step1: Chromatographic peak detection through centwave
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+CentWaveParam()
+#it tell us the default parameters (already defined)
+```
+
+We must modify these parameters according to the given parameters in the exercise. 
+```{r message=FALSE, eval=FALSE, echo=TRUE, cache=TRUE}
+cw_onlinexcms_default <- CentWaveParam(ppm = 15, 
+                                       peakwidth = c(5, 20),snthresh = 6, 
+                                       prefilter = c(3, 100),mzCenterFun = "wMean", 
+                                       integrate = 1L,mzdiff = -0.001, fitgauss = FALSE, 
+                                       noise = 0, verboseColumns = FALSE, 
+                                       roiList = list(), firstBaselineCheck = TRUE, 
+                                       roiScales = numeric())
+
+
+xdata <- findChromPeaks(raw_data, param = cw_onlinexcms_default) 
+
+```
+* findChromPeaks(): to detect chromatographic peaks. We will have an s4 object that stores the peaks it has found for each sample.
+* The findChromPeaks() function will give us a result that will be a list of all the peaks it finds with the centWave function in the 32 samples we have in raw_data. 
+* xData is the s4 object that contains all the xcms processing results. 
+* When the findChromPeaks() finishes running, the results will be stored in the variable xData
+
+
+### 3.1 How many peaks were detected on average per sample? 
+#### **Number of peaks detected on average per sample:**   
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+xdata  
+```
+* Chromatographic peak detection:
+ + Method we have used: centWave
+ + On average 28624 chromatographic peaks per sample.
+
+
+## Step 2: Alignment 
+There can be a little bit of movement of the RT from sample to sample.
+These minimums alignments can be corrected and we do use adjustRtime() wrapper function. 
+We have different algorithms to adjust RT. We are using obiwarp. 
+ObiwarpParam() warps the (full) data to a reference sample.
+
+Settings for the alignment:
+We are going to use the online xcms parameters: profStep= 1 --> binSize = 1 
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+xdata <- adjustRtime(xdata, param = ObiwarpParam(binSize = 1))
+```
+It uses sample number 16 as a sample against which you align the remaining ones. 
+It is done for all the samples. 
+
+
+
+### 3.2 Was retention time deemed necessary?. Plot difference between raw and adjusted retention times.
+
+We inspect difference between raw and adjusted retention times.
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+plotAdjustedRtime(xdata, col = group_colors[xdata$sample_group]) 
+```
+
+We represent which are the RT applied for each sample.
+Each line represents a sample. 
+Between 90 and 260 seconds approximately, we have adjusted more or less like 7 seconds above and 2 seconds below. 
+
+
+### We use adjustedRtime parameter to access raw/adjusted retention times
+
+```{r, message=FALSE, eval=TRUE, echo=TRUE, fig.width = 10}
+par(mfrow = c(1, 2), mar = c(4, 4.5, 0.9, 0.5))
+## Before the Alignment 
+plot(chromatogram(xdata, mz = mzr,rt = rtr, adjustedRtime = FALSE), 
+     col = group_colors[xdata$sample_group], peakType = "none", lwd = 2,
+     main = "Before alignment")
+## After the Alignment 
+plot(chromatogram(xdata, mz = mzr, rt = rtr),
+     col = group_colors[xdata$sample_group], peakType = "none", lwd = 2,
+     main = "After alignment")
+```
+
+Before the alignment, it was pretty well aligned, but after the alignment, we note that is better aligned. 
+We can say that it is not extremely necessary to align it but if we do the alignment, it does not perform worse after retention time adjustment. Therefore, we can work well after the alignment. 
+
+
+## Step 3: Correspondence 
+Correspondence group peaks or signals from the same ion across samples. 
+
+### Defining peak density parameters
+
+Setting the given default parameters in the exercise for peak density using PeakDensityParam().
+
+We define the given peak density parameters:
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+onlinexcms_pdp <-  PeakDensityParam(sampleGroups = pheno$class,
+                                   minFraction = 0.8, bw = 5, 
+                                   binSize = 0.015)
+
+```
+Performance of the correspondence analysis using optimized peak density settings.
+In order to see how correspondence works we use groupChromPeaks().
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+xdata <- groupChromPeaks(xdata, param = onlinexcms_pdp) 
+## xdata contains my features. 
+```
+
+### 3.3 How many features were finally detected?
+#### Correspondence Results 
+Extracting the feature definitions as data frame.
+We can see the correspondence results with featureDefinitions().
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+feature.info <- as.data.frame(featureDefinitions(xdata))
+```
+
+##### **Number of detected features:**
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+dim(feature.info)
+```
+We have found 27398 features.
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+xdata  
+```
+* Correspondence:
+    + 27398 features have been identified 
+
+
+## Step 4: Missing Values 
+
+The feature matrix we will create later (D) contains NA values for samples in which no chromatographic peak was detected in the feature’s m/z-rt region. We must fill in missing peaks in order to fill in the empty areas, and reduce the number of NA values in our matrix. 
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We get missing values before filling in peaks
+apply(featureValues(xdata, filled = FALSE), MARGIN = 2,
+      FUN = function(z) sum(is.na(z)))
+```
+
+We use the fillChromPeaks method to fill in intensity data for such missing values from the original files. 
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+xdata <- fillChromPeaks(xdata)
+```
+
+# EXERCISE 4: 
+## Filter features and rank features to metabolite identification MS/MS experiments. Use intensity, sample representation, maximum feature width, analytical variation and statistical criteria. Obtain a list of priorized features for MS/MS experiments and perform a MS1 search to the HMDB. 
+
+## 4.1 Filter detected features using an intensity minimum threshold = 3000. How many features out of the initially detected are retained? 
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We get intensity values for each feature
+D <- as.data.frame(featureValues(xdata, value = "maxo", method = "maxint"))
+colnames(D) <- pData(xdata)$sample_name
+```
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We compute the mean intensities for each group
+class <- pData(xdata)$class
+median.intensities <- as.data.frame(t(apply(D,
+                                            1, function(x) tapply(x, class, median, na.rm = TRUE))))
+median.intensities$QC <- NULL #remove QC group
+
+```
+#### **Number of features retained out of the initially detected**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We stablish intensity threshold value: 3000
+thresholdvalue <- 3000
+##Getting number of features with mean intensity above certain 
+##threshold counts in at least one of the groups except QC group
+idx_i <- names(which(apply(median.intensities,
+                           1, function(x) any(x>thresholdvalue)==TRUE)==TRUE))
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+length(idx_i)
+```
+We know in our case threshold must be 3000. 
+We take a look at features with mean intensity above 3000. We reject features below 3000. 
+Finally, we observe only 11883 out of 27398 features are above the threshold intensity value (3000)
+
+## 4.2 How many features out of the initially detected meet the 80% rule? Explain this rule in your own words. What is the rationale behind it?
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+### We compute number of samples per experimental group and minimum percent 
+n.samplespergroup <- table(pData(xdata)$class) 
+percent <- 0.8 #we apply the desired percentage
+samples.min <- round(n.samplespergroup*percent,0)
+
+samples_per_group <- feature.info[,c(grep("npeaks", 
+                                          colnames(feature.info))+1:length(samples.min))]
+samples_per_group_QC <- samples_per_group[colnames(samples_per_group) != "QC"]
+## We remove QCs
+samples.min_QC <- samples.min[names(samples.min)!= "QC"]
+resta <- apply(samples_per_group_QC, 1,  function(x) 
+{any(x-as.vector(samples.min_QC)>0)}
+)
+idx_s <- rownames(D)[which(resta==TRUE)]
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+length(idx_s)
+```
+Only 20027 features out of the total initially found (27398) are present in at least 80% of the sample of at least one of the experimental groups.
+
+
+#### **In order to explain the 80% rule:**
+
+For example, we have: 
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+n.samplespergroup   
+```
+
+If we do: 
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+samples.min   
+```
+Then, we will retain the feature if it is represented in at least 4 of HCC70, or in 5 of MCF7, or in 5 of MDA231, or in 4 of MDA436, or in 4 of MDA468. 
+That is to say, if we find a feature in 4 of HCC70 and anywhere else, we will retain that feature because it meets that it is at least in 80% of the samples of one of the experimental groups. 
+We will reject the features that do not meet this condition.
+
+
+## 4.3 How many features out of the initially detected hold a peak width below 40 seconds? 
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+
+## We calculate rtmax - rtmin of all rows and we add the subtraction at the end of the data frame (column peakwidth40 of feature.info)
+feature.info$peakwidth40 = feature.info[,6] - feature.info[,5] 
+## We calculate the number of features out of the initially detected that hold a peak width below 40 seconds
+num_features_peakwidth_below40s <- length(feature.info$peakwidth40[(feature.info$peakwidth40)<40])
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+num_features_peakwidth_below40s
+```
+There are 27376 features out of the initially detected that hold a peak width below 40 seconds
+
+## 4.4 How many features out of the initially detected enclose higher biological than analytical variation?
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## small function to calculate RSD%---------------------------------
+RSD <- function(x){100*sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)}
+
+## We define  QC idx--------------------------------------------------
+QChits <- which(class == "QC")
+
+## We compute RSDs across samples and QCs----------------------------
+RSD_samples <- apply(D[,-QChits],1, RSD)
+RSD_QC <- apply(D[, QChits],1, RSD)
+
+## We filter those features with RSD(QCs) > RSD (Samples)------------
+idx_qc <- names(RSD_samples)[which(RSD_QC< RSD_samples)]
+
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+length (idx_qc)
+```
+We have 24121 features out of 27398 that hold higher biological than analytical variation
+
+## 4.5 Select features that meet all filtering criteria. How many features resulted from the intersection of all filters?. Perform a PCA exploratory analysis considering them. Explain main trends in the data in terms of PC1 vs PC2 scores plot.
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+# Merge intensity  sample representation and QCs criteria---------
+## Intersect: We consider all the filters 
+data2stats <- D[intersect(intersect(idx_i, idx_s),idx_qc),-c(grep("QC", class))]
+colnames(data2stats) <- pData(xdata)$sample_name[which(pData(xdata)$class!="QC")]
+```
+#### **Number of features resulting from the intersection of all filters**
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+dim(data2stats)
+```
+We retain only 9867 features out of 27398 we initially have. 
+The product of applying the whole process of filtering has greatly reduced the number of features that I take for my statistics. It has gone from 27398 to 9867, that is to say, only 9867 features are features of interest to us to take them to do MS/MS experiments, or they meet some statistical criteria that make it possible for us to obtain meaningful MS/MS from our data. 
+
+#### **PCA exploratory analysis**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+##  Row-wise normalzation------------------------------------------------
+D.norm <- as.data.frame(apply(data2stats, 1, function(x) (x/max(x, na.rm = TRUE))))
+D.norm[is.na(D.norm)] <- 0
+
+##  We compute PCA----------------------------------------------------------
+pca_data <- prcomp(D.norm,retx=TRUE, center=TRUE, scale=FALSE)
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+summary(pca_data)$importance[,c(1:3)]
+```
+The PCA gives me the proportion of variance: 0.53959 (54%) 
+This means that in my first principal component (PC1) I only retain, considering only 1 component, 54% of the info that I had originally in my space of 9867 variables.
+If I take 2 components I am representing 54% + 74% of the information (54 + 20 = 74), because in the PCA, the second principal component (PC2) is searched in the direction of maximum variation of the data that is not explained in the PC1. That is, when we rotate the axis of original variables, the PCA always does it according to the maximum variation that can explain the data. The variation that has been explained in the PC1 component (it is orthogonal to it) is collected in the PC2. And as we add components, we keep adding on. 
+With the PC2 we explain the 74% of variation of the original matrix, With the PC3 we explain the 82% variation of the original matrix, and so on. 
+If we take more components we are explaining more % of variation of the original matrix. That is to say, in the PCA we see great tendencies, and this % of variation is the % of information that I retain from my original matrix. 
+
+
+#### **PCA Plot**
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+
+## We declare new class BRCA1 and nonBRCA1------------------------
+cl <- as.character(pData(xdata)$class)
+
+#BRCA1: HCC70, MDA-MB-436 and MDA-MB-468
+cl[grep("4|C7", cl)] <- "BRCA1"
+#nonBRCA1: MCF-7 and MDA-MB-231
+cl[grep("MC|231", cl)] <- "nonBRCA1"
+
+## Scores data
+scores <- data.frame(pca_data$x[, c("PC1", "PC2")])
+scores$class <- cl[-c(grep("QC", class))]
+scores$lab <- rownames(D.norm)
+
+scores.plot <- ggplot(data = scores, aes(x = PC1, y = PC2, colour = class, label=lab)) + 
+  geom_point(alpha = I(0.7), size = 4) + 
+  geom_hline(yintercept = 0)+
+  geom_vline(xintercept = 0)+
+  xlab(paste("PC1 (", round(summary(pca_data)$importance[2,1], 2) * 100, "%)"))+
+  ylab(paste("PC2 (", round(summary(pca_data)$importance[2,2], 2) * 100, "%)"))+
+  stat_ellipse() + 
+  theme_bw()
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+ggplotly(scores.plot)
+```
+
+We can see the first principal component (PC1) represents greatest variability (54%) and PC2 represents the 20% of variability in the data set. 
+On the one hand there are non-mutated BRCA1 BC cell lines (MDA-MD-231 and MCF7) and on the other hand we have BC cell lines that are carriers of pathogenic BRCA1 mutations (MDA-MB-436 and MDA-MD-468 ).
+This PCA score plot shows us there are separations between the BC cell lines that were analysed. We can distinguish the non-mutated BRCA1 BC cell lines from BC cell lines that are carriers of pathogenic BRCA1 mutations. 
+However, we note that the non-mutated BRCA1 BC cell line HCC70 is very close to MDA-MB-436 and MDA-MD-468 (BC cell lines that are carriers of pathogenic BRCA1 mutations) meaning they are metabolically  similar, because we know that samples who are closer to each other means they are more alike in the original space. 
+Therefore, what we see in this PCA is that there is variability between non-mutated BRCA1 BC cell lines and BC cell lines that are carriers of pathogenic BRCA1 mutations. Moreover, there are phenotypic similarities at the metabolic level depending on the presence of alterations linked to BRCA1.
+
+
+## 4.6 Impute NA values in the matrix resulting from filtered features using the minimum value in this matrix. Compare between non-BRCA1-like (MCF-7 and MDA-MB-231) and BRAC-1 like (HCC70, MDA-MB-436 and MDA-MB-468) cell lines computing Fold Changes and the Student’s t-test. Correct for multiple testing using FDR (false discovery rate). Consider FC>5 and p-corrected values<0.001 for statistical significance. How many features were considered to be significantly varying between the two phenotypes?. Plot the corresponding volcano plot and comment on it.
+
+#### **Impute NA values in the matrix resulting from filtered features using the minimum value in this matrix**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+#We get the minimum value in data2stats matrix (We see the minimum value in the matrix is 200)
+#We replace NA values in data2stats with the minimum value in the matrix.
+data2stats[is.na(data2stats)]<- min(data2stats, na.rm=T)
+```
+
+#### **Comparison between non-BRCA1-like (MCF-7 and MDA-MB-231) and BRAC-1 like (HCC70, MDA-MB-436 and MDA-MB-468) cell lines computing Fold Changes and the Student’s t-test. Correct for multiple testing using FDR (false discovery rate). We consider FC>5 and p-corrected values<0.001 for statistical significance.**
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+
+## We remove the QC of the cl vector
+cl_no <- cl[cl!="QC"] 
+## We perform an ANOVA comparison for the nonBRCA1-like (MCF-7 and MDA-MB-231) and BRAC-1 like (HCC70, MDA-MB-436 and MDA-MB-468) cell lines ---------------------------------------------
+gr <- as.factor(cl_no)
+pm <- matrix(ncol=1,nrow=dim(data2stats)[1])
+
+for(i in 1:nrow(data2stats)){ 
+  aov.out <- aov(as.numeric(data2stats[i,]) ~ gr)
+  multcomp <- TukeyHSD(aov.out)
+  pm[i,]  <- as.matrix(multcomp$gr[,"p adj"])
+}
+rownames(pm) <- rownames(data2stats)
+colnames(pm) <- rownames(multcomp$gr)
+
+## We adjust for multiple testing using false discovery rate
+p.val.adj.nonBRCA1.BRCA1 <- p.adjust(pm[,"nonBRCA1-BRCA1"],"fdr")
+
+## We create a function to compute FC-----------------------------------------------
+fc.test <- function(df, classvec, class.case, class.control) {
+  coln <- names(df)
+  case <- df[which(coln == class.case)]
+  control <- df[which(coln == class.control)]
+  logFC <- log2(case/control)
+  FC <- case/control
+  FC2 <- -control/case
+  FC[FC < 1] <- FC2[FC < 1]
+  fc.res <- c(FC, logFC)
+  names(fc.res) <- c("FC", "logFC")
+  return(fc.res)
+}
+
+## We calculate median intensities
+median.intensities <- t(apply(data2stats, 1, tapply, cl_no, median))
+
+## We calculate FC for 'nonBRCA1-BRCA1' groups
+fc.nonBRCA1_BRCA1 <- as.data.frame(t(apply(median.intensities, 1, function(x)
+  fc.test(x, classvec = cl_no, class.case = "nonBRCA1", class.control = "BRCA1"))))
+colnames(fc.nonBRCA1_BRCA1) <- c("FC_nonBRCA1_BRCA1", "logFC_nonBRCA1_BRCA1")
+
+## We consider FC>5 and p-corrected value<0.001 for statistical significance
+idx_nonBRCA1_BRCA1 <- which(abs(fc.nonBRCA1_BRCA1$FC)> 5 & 
+                              p.val.adj.nonBRCA1.BRCA1 < 0.001)
+```
+#### **Number of features that are considered to be significantly varying between the two phenotypes**
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+length(idx_nonBRCA1_BRCA1)
+```
+Finally, we get 2029 out of 9867 features significantly varying in nonBRCA1 vs BRCA1 comparison 
+
+#### **Plot the corresponding volcano plot**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We draw Volcano plot for our comparison: nonBRCA1 vs BRCA1
+RES <- cbind.data.frame(median.intensities, 
+                        fc.nonBRCA1_BRCA1, 
+                        p.val.adj.nonBRCA1.BRCA1)
+RES$labels <- rownames(RES)
+
+p1 <- ggplot(data = RES, 
+             aes(x = RES$logFC_nonBRCA1_BRCA1, 
+                 y = -log10(RES$p.val.adj.nonBRCA1.BRCA1),
+                 label = labels)) +
+  geom_point(alpha = 0.4, size = 1.75) + theme(legend.position = "none") +
+  xlim(-10, 10) + 
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_vline(xintercept = log2(2), linetype = "dashed") + 
+  geom_vline(xintercept = -log2(2), linetype = "dashed") + 
+  labs(x = "log2(FC)", y = "-log10(p.adj)", 
+       title = "nonBRCA1 vs BRCA1") +
+  theme_bw()
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE, warning = FALSE}
+ggplotly(p1)
+```
+
+
+The volcano plot shows the adjusted p-value (the FDR) vs the magnitude of change (the fold change). On the x-axis we can find the fold change and, on the y-axis, the negative log 10 of the p-value.
+The points that are on the top of the graph are those of the lowest adjusted p-value, which is shown as a higher negative log FDR value. In other words, these are more significant than those at the bottom of the graph. So, points that are above of the horizontal line and points that are at the left and at the right of vertical lines, are those that are above the significance threshold which is set at p-corrected values<0.001 (FDR < 0.001) and at fold change > 5 (FC>5) respectively. 
+Genes that are upregulated (BRCA1) are plotted to the right side of the graph (positive log fold change value) and on the other hand, genes that are down regulated (nonBRCA1) are plotted on the left side of the graph (negative log fold change).
+When there are statistically significant differences, the plot looks like a volcano, where the features that are statistically significant are the ones that are erupting from the volcano. 
+These features are the ones that are characterizing our nonBRCA1 samples (left) and our BRCA1 samples (right).
+ 
+
+## 4.7 Download the HMDB and adducts tables and search those significant features using exact mass. Summarise results to MS/MS. Save the final results summary to a “.csv” file.
+
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+## We read adduct information
+positive <- read.table("C:/Users/Bernat/Desktop/UNI/3r 2010-2021/Omicas/Practicas/PractFINAL/ID/Positive_ESI.txt", header = T, stringsAsFactors = F)
+## We read HMDB database
+hmdb <- read.table("C:/Users/Bernat/Desktop/UNI/3r 2010-2021/Omicas/Practicas/PractFINAL/ID/HMDB_17_09.txt", header = T, sep = "\t", stringsAsFactors = F, 
+                   fill = T, quote = "")
+
+
+## list of significant features' m/z
+input.mz <- feature.info[rownames(RES), "mzmed"]
+input.rt <- feature.info[rownames(RES), "rtmed"]
+## ppm error to perform the search. Instrument dependant (e.g. orbitrap 2-6;
+# qTOF 8-12)
+ppm <- 10
+
+hmdbhits <- lapply(input.mz, function(x) {
+  search_vect <- (x + positive$AdductMass)  # here we are using positive ionization
+  h <- lapply(search_vect, function(x) {
+    mass_range <- c(x - ppm * (x/1e+06), x + ppm * (x/1e+06))
+    a <- which(hmdb$MonoisotopicMass > mass_range[1] & hmdb$MonoisotopicMass < 
+                 mass_range[2])
+  })
+  
+  h2 <- sapply(1:length(h), function(x) {
+    y <- h[[x]]
+    if (length(y) > 0) {
+      r <- paste(hmdb$Name[y], sep = "", collapse = ";")
+    } else {
+      r <- "No hit"
+    }
+    return(r)
+  })
+  
+  return(h2)
+})
+hmdbhits <- do.call("rbind", hmdbhits)
+colnames(hmdbhits) <- positive$Adduct
+
+```
+
+#### **Summarize results to MS/MS**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+RESULTS2MSMS <- cbind.data.frame(RES,input.mz, input.rt, hmdbhits)
+```
+
+#### **Save the final results summary to a “.csv” file**
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+#We save the final results summary to a “.csv” file
+write.csv(RESULTS2MSMS, file="results2MSMS.csv")
+```
+
+## 4.8 Plot the levels of the metabolic feature with a rtmed~221 seconds and mzmed = 166.0713. Which are its associated putative identifications considering the [M+H]+ adduct? Is there more than a plausible identification? If yes, which ones? 
+
+```{r message=FALSE, eval=FALSE, echo=TRUE}
+# We subset the data frame RESULTS2MSMS to get the feature with rtmed~221 seconds and mzmed = 166.0713
+  ## input.mz will be the mzmed of all the statistically significant features. 
+  ## input.rt will be the rtmed of all the statistically significant features. 
+
+My_feature_subset <-RESULTS2MSMS[which.min(abs(221-RESULTS2MSMS$input.rt)),]
+
+```
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+
+My_feature_subset
+```
+The feature with a rtmed~221 seconds and mzmed = 166.0713 is the feature FT01844.
+
+#### **Associated putative identifications considering the [M+H]+ adduct of Feature FT01844**
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+  #In order to see [M+H]+ adduct of feature FT01844
+  My_feature_subset[,"M+H", drop=FALSE]
+
+```
+We note that for [M+H]+ adduct of feature FT01844, it can be all these 4 metabolites:  7-Methylguanine or 3-Methylguanine or 1-Methylguanine or N2-Methylguanine. 
+
+
+
+```{r message=FALSE, eval=TRUE, echo=TRUE}
+  #We plot boxplot for the feature FT01844 
+  boxplot(as.numeric(D["FT01844",])~pData(xdata)$class,
+          xlab="class",
+          ylab="FT01844")
+
+```
+
+We can observe that the interquartile range is quite similar in boxplots of cell lines that are carriers of pathogenic BRCA1 mutations. 
+The IQR in experimental group MCF7 is a lot larger than the rest of experimental groups. 
+We note that experimental group MCF7 boxplot varies quite a bit (much larger height of the boxplot; goes from 2500 to 5000). We have a bigger spread in MCF7 boxplot than in the other experimental groups.
+The other experimental group boxplots are pretty condensed. That means they varies less; they are more consistent and easier to predict.
+HCC70 and MDA231 experimental groups boxplots are rather symmetric. The Q2 are in the center of the boxplot, while the skewness is particularly large in MCF7, MDA436 and MDA468 boxplots.
+
+We can see one outlier beyond the whiskers of the MDA231 and QC boxplot. These are some bigger values than the most. We can also see one outlier below the whiskers of the MDA436 boxplot and MDA468 boxplot, meaning they are smaller value than the most. 
+
+We may notice that boxplots of cell lines that are carriers of pathogenic BRCA1 mutations present significantly lower levels of the metabolite we are trying to identify than non-mutated BRCA1 BC cell lines.
+In conclusion, cell lines that are carriers of pathogenic BRCA1 mutations and non-mutated BRCA1 BC cell lines are significantly different. 
+
+
+
+
+
+
+
+
+

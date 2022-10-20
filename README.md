@@ -1,5 +1,5 @@
 # 🧬Metabolomics-II🧬
-## Ranking and filtering metabolic features to metabolite identification MS/MS experiments.
+## Ranking and filtering metabolic features to metabolite identification MS/MS experiments
 ### 📝Briefing
 This project is based upon the original work by Samino et al 2017 manuscript (https://www.nature.com/articles/s41598-017-17897-8). Only a restricted set of the total number of measurements described in this manuscript is going to be used. Thus, the project dataset consists of LC/MS(ESI(+)/QTOF) measurements performed on the hydrophilic cell extracts derived from five different Breast Cancer (BC) cell lines divided in non-BRCA1-like (MCF-7 and MDA-MB-231) and BRAC1-like (HCC70, MDA-MB-436, MDA-MB-468) phenotypes. 
 ### 💾Data
